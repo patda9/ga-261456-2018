@@ -28,11 +28,12 @@ def form_network(form, population):
         i = n
     return weights
 
-def forward_pass(d, form, population, x):
+def forward_pass(d, form, population, x, model=False):
     y_hats = []
-    for i in range(len(population)):
-        weights = form_network(form, population[i])
+    if(model == True):
+        optimal_solution = population
         outputs = []
+        weights = form_network(form, optimal_solution)
 
         z = x.dot(weights[0])
         a = sigmoid(z)
@@ -43,6 +44,20 @@ def forward_pass(d, form, population, x):
             a = sigmoid(z)
             outputs.append(a)
         y_hats.append(outputs[-1])
+    else:
+        for i in range(len(population)):
+            weights = form_network(form, population[i])
+            outputs = []
+
+            z = x.dot(weights[0])
+            a = sigmoid(z)
+            outputs.append(a)
+            for w in weights[1:]:
+                input = z
+                z = input.dot(w)
+                a = sigmoid(z)
+                outputs.append(a)
+            y_hats.append(outputs[-1])
     return y_hats
 
 def train(epochs, form, d, population, x): # epoch is generation
@@ -186,6 +201,46 @@ def calculate_fitness(d, population, y_hat):
     # return max: -cost(y_hat)
     return -cross_entropy(y_hat, d)
 
+def predict(y_hat):
+    if(y_hat[0] >= .5):
+        return 1.
+    else:
+        return 0.
+
+def k_fold(x, d, ):
+    # combine 
+    # shuffle
+    # folding 
+
+    # fold_len = int(data.shape[0] / k)
+    # input_folds = []
+    # output_folds = []
+    # for i in range(k):
+    #     if(i >= k-1):
+    #         input_folds += [input[i * fold_len:(i+1) * fold_len + (input.shape[0] % fold_len)]]
+    #         output_folds += [d[i * fold_len:(i+1) * fold_len + (input.shape[0] % fold_len)]]
+    #     input_folds += [input[i * fold_len:(i+1) * fold_len]]
+    #     output_folds += [d[i * fold_len:(i+1) * fold_len]]
+
+    # if(input.shape[0] % k > 0): # prevent empty array
+    #     input_folds += [input[k * fold_len:input.shape[0]]]
+    #     output_folds += [d[k * fold_len:d.shape[0]]]
+
+    # for i in range(k):
+    #     print('fold:', i)
+    #     input_temp = input_folds.copy()
+    #     output_temp = output_folds.copy()
+    #     testing_set = input_temp[i]
+    #     d_test = output_temp[i]
+    #     del(input_temp[i])
+    #     del(output_temp[i])
+    #     training_set = np.concatenate(input_temp, axis=0)
+    #     d_train = np.concatenate(output_temp, axis=0)
+    #     layers = train(activations, form, training_set, d_train, learning_rate, epochs)
+    #     fold_acc = test(layers, testing_set, d_test)
+    #     sum_acc += fold_acc
+    #     print('fold[' + str(i) + '] accuracy:', fold_acc, '%', '\n', '\n')
+
 if(__name__ == '__main__'):
     iterations = 1000
     population = []
@@ -196,21 +251,20 @@ if(__name__ == '__main__'):
     wdbc_data = np.genfromtxt('wdbc-norm.csv', delimiter=',')
     x = np.copy(wdbc_data).T
     x = x[1:].T
-    print(x)
+    # print(x)
     d = (np.copy(wdbc_data)).T
     d = d[0].reshape(d[0].shape[0], 1)
     # print(d)
 
-    # x = np.random.randn(10, 3)
-    # print(x)
-    # d = np.random.randint(2, size=(10, 2))
-    # print(d)
+    hidden = [3, 1]
 
     for i in range(size):
-        population.append(Individual((90, 1))) # 5 x 3 + 3 x 2
+        population.append(Individual((x.shape[1] * hidden[0] + hidden[0] * hidden[1], 1))) # 5 x 3 + 3 x 2
     population = np.asarray(population)
 
-    # mate(population, mutation_rate)
-    # mutate(mutation_rate, population)
-    # forward_pass(d, '5, 3, 2, 2', population, x)
-    optimal_solution = train(iterations, '30, 3', d, population, x)
+    form = (str(x.shape[1]) + ', ' + str(hidden[0]) + ', ' + str(hidden[1]))
+    optimal_solution = train(iterations, fo b rm, d, population, x)
+
+    test_x = x[np.random.randint(x.shape[0])]
+    output_class = forward_pass(d, form, optimal_solution, test_x, model=True)
+    print(predict(output_class))
