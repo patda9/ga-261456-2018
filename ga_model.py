@@ -5,7 +5,7 @@ import numpy as np
 class Individual(object): # create individual
     def __init__(self, w_shape):
         self.solution = np.random.randn(w_shape[0], w_shape[1])
-        self.fitness = -(np.inf)
+        self.fitness = 0
 
 # train(x) -> cal_error(y_hat) -> fitness or cost(y_hat) -> update_with_ga(y_hat) -> train
 
@@ -60,23 +60,14 @@ def forward_pass(d, form, population, x, model=False):
             y_hats.append(outputs[-1])
     return y_hats
 
-def train(epochs, form, d, population, x): # epoch is generation
+def train(epochs, form, d, population, x, iteration): # epoch is generation
     j = 0
     optimal_solution_index = 0
-    optimal_fitness = -(np.inf)
+    optimal_fitness = 10000
     optimal_solution = population[0]
     
+    file = open('training-log-fold' + str(iteration) + '.txt', 'w')
     while(j < epochs):
-        # update fitness
-        # print(j)
-        # for i in range(len(population)):
-        #     print(population[i].solution)
-        #     print(population[i].fitness)
-        # print('before')
-        # for i in range(len(population)):
-            # print(population[i].solution)
-            # print(population[i].fitness)
-
         y_hats = forward_pass(d, form, population, x)
         for i in range(len(population)):
             population[i].fitness = calculate_fitness(d, population[i], y_hats[i])
@@ -100,29 +91,23 @@ def train(epochs, form, d, population, x): # epoch is generation
             # print(population[i].solution)
             population[i].solution = winner_pool[k].solution
             k += 1
-            # print(population[i].solution)
-        # print(list(set(winner_pool)), list(set(winner_index)))
-        # print(winner_pool[0].solution)
-        # mate(winner_pool, (1 / len(population)))
-        ###
-
-        # print('after')
-        # for i in range(len(population)):
-            # print(population[i].solution)
-            # print(population[i].fitness)
-        
         for i in range(1, len(population)):
-            if(population[i].fitness > optimal_fitness):
+            if(population[i].fitness < optimal_fitness):
+                print(population[i].fitness, optimal_fitness)
                 optimal_solution_index = i
                 optimal_fitness = population[i].fitness
                 optimal_solution = population[i]
-        if(j % 128 == 0):
-            print('fitness:', population[0].fitness)
+        print('*', optimal_solution.fitness)
+        print(j)
+        if(j % 256 == 0):
+            print('fitness:', optimal_solution.fitness)
         # print(('individual[' + str(optimal_solution_index) + ']:'), form_network(form, optimal_solution))
         j += 1
+    file.writelines('fitness:' + str(optimal_solution.fitness) + '\n')
     print(optimal_fitness)
     print(optimal_solution_index)
     print(optimal_solution.solution)
+    file.close()
     return optimal_solution
 
 def mate(mating_pool, mutation_rate):
@@ -199,53 +184,89 @@ def cross_entropy(y_hat, d, e=(1e-7)):
 
 def calculate_fitness(d, population, y_hat):
     # return max: -cost(y_hat)
-    return -cross_entropy(y_hat, d)
+    return cross_entropy(y_hat, d)
 
-def predict(y_hat):
-    if(y_hat[0] >= .5):
-        return 1.
-    else:
-        return 0.
+def predict(y_hats):
+    for i in range(len(y_hats)):
+        for j in range(len(y_hats[i])):
+            if(y_hats[i][j] >= .5):
+                y_hats[i][j] = 1
+            else:
+                y_hats[i][j] = 0
+    return y_hats
 
-def k_fold(x, d, ):
+def accuracy_measure(d_test, predictions):
+    compare = np.concatenate((d_test, predictions), axis=1)
+    count = 0
+    print(compare)
+    for i in range(len(d_test)):
+        for j in range(len(d_test[i])):
+            if(d_test[i][j] == predictions[i][j]):
+                count += 1
+    return count / len(predictions)
+
+def test(d_test, form, optimal_solution, x_test):
+    y_hats = forward_pass(d_test, form, optimal_solution, x_test, model=True)[0]
+    predictions = predict(y_hats)
+    accuracy = accuracy_measure(d_test, predictions)
+    return accuracy
+
+def k_fold(x, d, k, epochs, form, population):
+    pareto = []
+    accuracies = []
     # combine 
+    data = np.concatenate((x, d), axis=1)
     # shuffle
+    np.random.shuffle(data)
+    #separate
+    x = np.hsplit(data, [x.shape[1]])[0]
+    d = np.hsplit(data, [x.shape[1]])[1].reshape(d.shape)
     # folding 
+    fold_len = int(data.shape[0] / k)
+    x_folds = []
+    d_folds = []
+    for i in range(k):
+        if(i >= k-1):
+            x_folds += [x[i * fold_len:(i+1) * fold_len + (x.shape[0] % fold_len)]]
+            d_folds += [d[i * fold_len:(i+1) * fold_len + (x.shape[0] % fold_len)]]
+        x_folds += [x[i * fold_len:(i+1) * fold_len]]
+        d_folds += [d[i * fold_len:(i+1) * fold_len]]
 
-    # fold_len = int(data.shape[0] / k)
-    # input_folds = []
-    # output_folds = []
-    # for i in range(k):
-    #     if(i >= k-1):
-    #         input_folds += [input[i * fold_len:(i+1) * fold_len + (input.shape[0] % fold_len)]]
-    #         output_folds += [d[i * fold_len:(i+1) * fold_len + (input.shape[0] % fold_len)]]
-    #     input_folds += [input[i * fold_len:(i+1) * fold_len]]
-    #     output_folds += [d[i * fold_len:(i+1) * fold_len]]
+    if(x.shape[0] % k > 0): # prevent empty array
+        x_folds += [x[k * fold_len:x.shape[0]]]
+        d_folds += [d[k * fold_len:d.shape[0]]]
+    
+    print(len(x_folds[-1]))
+    print(len(d_folds[-1]))
 
-    # if(input.shape[0] % k > 0): # prevent empty array
-    #     input_folds += [input[k * fold_len:input.shape[0]]]
-    #     output_folds += [d[k * fold_len:d.shape[0]]]
+    for i in range(k):
+        print('fold:', i)
+        x_temp = x_folds.copy()
+        d_temp = d_folds.copy()
+        x_test = x_temp[i]
+        d_test = d_temp[i]
+        del(x_temp[i])
+        del(d_temp[i])
+        x_train = np.concatenate(x_temp, axis=0)
+        d_train = np.concatenate(d_temp, axis=0)
 
-    # for i in range(k):
-    #     print('fold:', i)
-    #     input_temp = input_folds.copy()
-    #     output_temp = output_folds.copy()
-    #     testing_set = input_temp[i]
-    #     d_test = output_temp[i]
-    #     del(input_temp[i])
-    #     del(output_temp[i])
-    #     training_set = np.concatenate(input_temp, axis=0)
-    #     d_train = np.concatenate(output_temp, axis=0)
-    #     layers = train(activations, form, training_set, d_train, learning_rate, epochs)
-    #     fold_acc = test(layers, testing_set, d_test)
-    #     sum_acc += fold_acc
-    #     print('fold[' + str(i) + '] accuracy:', fold_acc, '%', '\n', '\n')
+        optimal_solution = train(epochs, form, d_train, population, x_train, i) # epoch is generation
+        accuracy = test(d_test, form, optimal_solution, x_test)
+
+        pareto.append(optimal_solution)
+        accuracies.append(accuracy)
+        file = open('./output-fold' + str(i) + '.txt', 'w')
+        file.writelines('optimal solution:' + str(optimal_solution.solution) + '\n')
+        file.writelines('fitness:' + str(optimal_solution.fitness) + '\n')
+        file.writelines('fold accuracy:' + str(accuracy) + '\n')
+        file.close()
+    return pareto, accuracies
 
 if(__name__ == '__main__'):
-    iterations = 1000
+    iterations = 2048
     population = []
 
-    size = 100
+    size = 256
     mutation_rate = 1 / size
 
     wdbc_data = np.genfromtxt('wdbc-norm.csv', delimiter=',')
@@ -259,12 +280,8 @@ if(__name__ == '__main__'):
     hidden = [3, 1]
 
     for i in range(size):
-        population.append(Individual((x.shape[1] * hidden[0] + hidden[0] * hidden[1], 1))) # 5 x 3 + 3 x 2
+        population.append(Individual((x.shape[1] * hidden[0] + hidden[0] * hidden[1], 1))) # 30 x 3 + 3 x 1
     population = np.asarray(population)
 
     form = (str(x.shape[1]) + ', ' + str(hidden[0]) + ', ' + str(hidden[1]))
-    optimal_solution = train(iterations, fo b rm, d, population, x)
-
-    test_x = x[np.random.randint(x.shape[0])]
-    output_class = forward_pass(d, form, optimal_solution, test_x, model=True)
-    print(predict(output_class))
+    pareto_front, accuracies = k_fold(x, d, 10, iterations, form, population)
